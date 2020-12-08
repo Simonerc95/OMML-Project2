@@ -6,18 +6,19 @@ import matplotlib.pyplot as plt
 from joblib import Parallel, delayed
 from itertools import product
 import numexpr as ne
+from sklearn.svm import SVC
 from Project_2_dataExtraction import *
 
 seed = 1679838
 np.random.seed(seed)
 
-def rbf_kernel(X, gamma):
+def rbf_kernel(X, z, gamma):
     X_norm = np.sum(X ** 2, axis=-1)
-    y_norm = np.sum(X ** 2, axis=-1)
+    y_norm = np.sum(z ** 2, axis=-1)
     return ne.evaluate('exp( -gamma * (A + B - 2 * C))', {
         'A': X_norm[:, None],
         'B': y_norm[None, :],
-        'C': np.dot(X, X.T),
+        'C': np.dot(X, z.T),
         'gamma': gamma
     })
 
@@ -53,7 +54,12 @@ X_train = data_norm[indices_train]
 X_test = np.delete(data_norm, indices_train, axis=0)
 y_train = full_labels[indices_train]
 y_test = np.delete(full_labels, indices_train, axis=0)
+# d = full_labels.dot(np.identity(len(full_labels)))
+classifier = SVC(kernel='precomputed')
 
+classifier.fit(rbf_kernel(X_train, X_train, 0.005), y_train)
+print(classifier.predict(rbf_kernel(X_test, X_train, 0.005)))
+print(y_test)
 class MLP:
     def __init__(self, df, N, rho, sigma=1, ttv=[.7, .85], act_func='hyperbolic_tangent', random_state=1679838):
 
