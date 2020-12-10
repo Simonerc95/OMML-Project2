@@ -31,7 +31,7 @@ def load_mnist(path, kind='train'):
     return images, labels
 
 
-cwd = r'../'
+cwd = os.getcwd()
 
 X_all_labels, y_all_labels = load_mnist(cwd, kind='train')
 
