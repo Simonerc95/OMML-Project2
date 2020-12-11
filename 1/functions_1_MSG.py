@@ -1,7 +1,8 @@
 import numexpr as ne
 from sklearn.svm import SVC
 from Project_2_dataExtraction import *
-
+import cvxopt
+from cvxopt import matrix
 seed = 1679838
 np.random.seed(seed)
 
@@ -47,7 +48,22 @@ X_train = data_norm[indices_train]
 X_test = np.delete(data_norm, indices_train, axis=0)
 y_train = full_labels[indices_train]
 y_test = np.delete(full_labels, indices_train, axis=0)
-classifier = SVC(kernel='precomputed')
 
-classifier.fit(poly_kernel(X_train, X_train, 100), y_train)
-classifier.predict(poly_kernel(X_test, X_train, 100))
+diag_y_train = y_train * np.identity(len(y_train))
+P = matrix(diag_y_train.dot(rbf_kernel(X_train, X_train, 0.05).dot(diag_y_train)), tc='d')
+q = matrix(np.ones(y_train.shape[0]), tc='d')
+G = matrix(np.vstack([np.identity(X_train.shape[0]), -np.identity(X_train.shape[0])]), tc='d')
+C = np.ones(X_train.shape[0])
+h = matrix(np.hstack([C, np.zeros(X_train.shape[0]).T]), tc='d')
+A = matrix(diag_y_train, tc='d')
+b = matrix(np.zeros_like(y_train), tc='d')
+
+from cvxopt import solvers
+
+dic = solvers.qp(P, q, G, h, A, b)
+print(dic)
+# classifier = SVC(kernel='precomputed')
+#
+# classifier.fit(poly_kernel(X_train, X_train, 100), y_train)
+# classifier.predict(poly_kernel(X_test, X_train, 100))
+
