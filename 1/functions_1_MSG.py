@@ -83,8 +83,8 @@ class SVM():
         solvers.options['show_progress'] = False
         solution = solvers.qp(P, q, G, h, A, b)
         self.opt_sol = solution
-
-        a = np.array(solution['x']).flatten()
+        self.alpha = np.array(solution['x']).flatten()
+        a = self.alpha
 
         # Support vectors have non zero lagrange multipliers
         sv = a > 1e-5
@@ -111,17 +111,29 @@ class SVM():
         y_pred = self.predict(X)
         return np.sum(y == y_pred) / len(y)
 
-    def test_loss(self, X, y):
-        pass
+    def get_loss(self, X, y):
+        n_samples, n_features = X.shape
+
+        # Gram matrix
+        K = self.kernel(X, X, self.gamma)
+
+        P = np.outer(y, y) * K
+        q = np.ones((1, n_samples))
+        b = 0.0
+        G = np.diag(np.ones(n_samples) * -1)
+        h = np.zeros(n_samples)
+        alpha = np.array(self.alpha)
+        loss = 0.5*(alpha.T.dot(P).dot(alpha)) - q.dot(alpha)
+        return loss
 
     def output(self):
         print(self.opt_sol)
 
 
-cl = SVM(kernel=polynomial_kernel, C=10, gamma=2)
+cl = SVM(kernel=polynomial_kernel, C=0.0001, gamma=1)
 cl.fit(X_train, y_train)
-
-
+print(cl.get_loss(X_train, y_train))
+cl.output()
 
 def k_fold(X_train, y_train, C=10, gamma=2, folds=4):
     """
@@ -173,7 +185,7 @@ def GridSearch(X_train, y_train, X_test, y_test, L_C=1, U_C=10, L_gamma=1, U_gam
     print(f'elapsed time: {round(time.time() - start,2)}')
     return best_params, train_accs, test_accs
 
-best_params, train_accs, test_accs = GridSearch(X_train, y_train, X_test, y_test, U_C=2, U_gamma=2)
-print(best_params)
-print(train_accs)
-print(test_accs)
+#best_params, train_accs, test_accs = GridSearch(X_train, y_train, X_test, y_test, U_C=2, U_gamma=2)
+#print(best_params)
+#print(train_accs)
+#print(test_accs)
