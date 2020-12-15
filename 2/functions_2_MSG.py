@@ -75,8 +75,8 @@ class SVM():
         q = matrix(np.ones(n_samples) * -1)
         A = matrix(y, (1, n_samples))
         b = matrix(0.0)
-        G = matrix(np.diag(np.ones(n_samples) * -1))
-        h = matrix(np.zeros(n_samples))
+        G = matrix(np.vstack((-1 * np.identity(n_samples), np.identity(n_samples))))
+        h = matrix(np.vstack((np.zeros((n_samples, 1)), self.C * np.ones((n_samples, 1)))))
 
 
         # solve QP problem
@@ -103,12 +103,19 @@ class SVM():
 
         # Weight vector
 
-    def predict(self, X):
+    def predict(self, X, a=None, sv=None, sv_y=None, b=None):
         k = self.kernel
-        return np.sign((self.a[None, :] * self.sv_y[None, :]).dot(k(X, self.sv, self.gamma).T) + self.b)
+        if a is not None:
+            return np.sign((a[None, :] * sv_y[None, :]).dot(k(X, sv, self.gamma).T) + b)
+        else:
+            return np.sign((self.a[None, :] * self.sv_y[None, :]).dot(k(X, self.sv, self.gamma).T) + self.b)
 
     def accuracy(self, X, y):
         y_pred = self.predict(X)
+        return np.sum(y == y_pred) / len(y)
+
+    def _accuracy(self, X, y, a, sv, sv_y, b):
+        y_pred = self.predict(X, a, sv, sv_y, b)
         return np.sum(y == y_pred) / len(y)
 
     def test_loss(self, X, y):
@@ -118,25 +125,26 @@ class SVM():
         print(self.opt_sol)
         
         
-    def decomp_method(self, X, y, q_value=4, num_iter=10, tol=4):
+    def decomp_method(self, X, y, q_value=10, num_iter=10, tol=4):
         nfev = 0
         best_loss = 1000
-        self.tot_fun = 0
+
         n_samples, n_features = X.shape
         alpha_upt = np.zeros(n_samples)
+        patience = 0
+        K = self.kernel(X, X, self.gamma)
         t = time.time()
         for c in range(num_iter):
-            W_index = np.random.choice(list(range(n_samples)), q_value, replace=True)
+
+            W_index = np.random.choice(list(range(n_samples)), q_value, replace=False)
             
             # Gram matrix
-            K = self.kernel(X[W_index,:], X, self.gamma)
-    
-            P = matrix(np.outer(y[W_index,:], y[W_index,:]) * K)
+            P = matrix(np.outer(y[W_index], y[W_index]) * K[W_index, :][:, W_index])
             q = matrix(np.ones(q_value) * -1)
-            A = matrix(y, (1, q_value))
+            A = matrix(y[W_index], (1, q_value))
             b = matrix(0.0)
-            G = matrix(np.diag(np.ones(q_value) * -1))
-            h = matrix(np.zeros(q_value))
+            G = matrix(np.vstack((-1 * np.identity(q_value), np.identity(q_value))))
+            h = matrix(np.vstack((np.zeros((q_value, 1)), self.C * np.ones((q_value, 1)))))
     
     
             # solve QP problem
@@ -144,33 +152,38 @@ class SVM():
             solution = solvers.qp(P, q, G, h, A, b)
             #self.opt_sol = solution
             nfev += solution['iterations']
+
             a = np.array(solution['x']).flatten()
-            
             alpha_upt[W_index] = a
-    
-    
-            # Support vectors have non zero lagrange multipliers
-            sv = alpha_upt > 1e-5
-            ind = np.arange(len(alpha_upt))[sv]
-            self.a = alpha_upt[sv]
-            self.sv = X[sv]
-            self.sv_y = y[sv]
-            # print("%d support vectors out of %d points" % (len(self.a), n_samples))
-    
-            # Intercept
-            self.b = 0
-            for n in range(len(self.a)):
-                self.b += self.sv_y[n]
-                self.b -= np.sum(self.a * self.sv_y * K[ind[n], sv])
-            self.b /= len(self.a)
-            
-            self.tot_fun += 1
-            current_loss = self._optimize(v)
+            sv_ind = alpha_upt > 1e-10
+            a = alpha_upt[sv_ind]
+            sv = X[sv_ind]
+            sv_y = y[sv_ind]
+            ind = np.arange(len(alpha_upt))[sv_ind]
+            b = 0
+            for n in range(len(a)):
+                b += sv_y[n]
+                b -= np.sum(a * sv_y * K[ind[n], sv_ind])
+            b /= len(a)
+
+            current_loss = solution['dual objective']
+
             if current_loss < best_loss:
-                self.W = self.W_tmp
-                self.b = self.b_tmp
-                self.v = v
+                patience = 0
+                self.a = alpha_upt[sv_ind]
+                self.sv = sv
+                self.sv_y = sv_y
+                # Intercept
+                self.b = b
                 best_loss = current_loss
-       
+
+            else:
+                if patience == tol:
+                    break
+                patience +=1
         self.fit_time = time.time() - t
         self.nfev = nfev
+
+clf = SVM(C=10,gamma=5)
+clf.decomp_method(X_train, y_train, q_value=800, num_iter=500, tol=10)
+print(clf.accuracy(X_test, y_test))
