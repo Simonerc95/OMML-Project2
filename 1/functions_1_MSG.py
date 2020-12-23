@@ -3,6 +3,7 @@ from Project_2_dataExtraction import *
 from cvxopt import matrix
 from cvxopt import solvers
 import time
+from sklearn.metrics import confusion_matrix
 
 seed = 1679838
 np.random.seed(seed)
@@ -66,6 +67,7 @@ class SVM():
         self.gamma = gamma
 
     def fit(self, X, y):
+        start = time.time()
         n_samples, n_features = X.shape
 
         # Gram matrix
@@ -100,6 +102,7 @@ class SVM():
             self.b += self.sv_y[n]
             self.b -= np.sum(self.a * self.sv_y * K[ind[n], sv])
         self.b /= len(self.a)
+        self.cpu_time = time.time() - start
 
         # Weight vector
 
@@ -128,12 +131,18 @@ class SVM():
 
     def output(self):
         print(self.opt_sol)
+        
+    def conf_mat(self, X, y):
+        y_pred = self.predict(X)
+        y_pred = y_pred.flatten()
+        cm = confusion_matrix(y, y_pred)
+        return cm
 
 
-cl = SVM(kernel=polynomial_kernel, C=0.0001, gamma=1)
-cl.fit(X_train, y_train)
-print(cl.get_loss(X_train, y_train))
-cl.output()
+#cl = SVM(kernel=polynomial_kernel, C=0.0001, gamma=1)
+#cl.fit(X_train, y_train)
+#print(cl.get_loss(X_train, y_train))
+#cl.output()
 
 def k_fold(X_train, y_train, C=10, gamma=2, folds=4):
     """
@@ -182,8 +191,24 @@ def GridSearch(X_train, y_train, X_test, y_test, L_C=1, U_C=10, L_gamma=1, U_gam
             clf.fit(X_train, y_train)
             train_accs[i][j] = clf.accuracy(X_train, y_train)
             test_accs[i][j] = clf.accuracy(X_test, y_test)
+            
+    plot3D(Cs, gammas, train_accs, test_accs)
     print(f'elapsed time: {round(time.time() - start,2)}')
     return best_params, train_accs, test_accs
+
+def plot3D(Cs, gammas, train_accs, test_accs):
+    
+    x = Cs
+    y = gammas
+    fig = plt.figure(figsize=(8, 6))
+
+    ax = plt.axes(projection='3d')
+    x_1, x_2 = np.meshgrid(x, y)
+    ax.plot_surface(x_1, x_2, z_.reshape(x_1.shape), rstride=1, cstride=1,
+                    cmap='gist_rainbow_r', edgecolor='none')
+    ax.set_title('surface')
+    
+
 
 #best_params, train_accs, test_accs = GridSearch(X_train, y_train, X_test, y_test, U_C=2, U_gamma=2)
 #print(best_params)
