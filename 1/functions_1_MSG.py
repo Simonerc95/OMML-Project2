@@ -73,13 +73,12 @@ class SVM():
         # Gram matrix
         K = self.kernel(X, X, self.gamma)
 
-        P = matrix(np.outer(y, y) * K)
+        P = matrix((np.outer(y, y) * K))
         q = matrix(np.ones(n_samples) * -1)
         A = matrix(y, (1, n_samples))
         b = matrix(0.0)
-        G = matrix(np.diag(np.ones(n_samples) * -1))
-        h = matrix(np.zeros(n_samples))
-
+        G = matrix(np.vstack((-1*np.identity(n_samples), np.identity(n_samples))))
+        h = matrix(np.vstack((np.zeros((n_samples, 1)), self.C*np.ones((n_samples, 1)))))
 
         # solve QP problem
         solvers.options['show_progress'] = False
@@ -89,7 +88,7 @@ class SVM():
         a = self.alpha
 
         # Support vectors have non zero lagrange multipliers
-        sv = a > 1e-5
+        sv = a > 1e-10
         ind = np.arange(len(a))[sv]
         self.a = a[sv]
         self.sv = X[sv]
@@ -119,12 +118,8 @@ class SVM():
 
         # Gram matrix
         K = self.kernel(X, X, self.gamma)
-
-        P = np.outer(y, y) * K
+        P = matrix((np.outer(y, y) * K))
         q = np.ones((1, n_samples))
-        b = 0.0
-        G = np.diag(np.ones(n_samples) * -1)
-        h = np.zeros(n_samples)
         alpha = np.array(self.alpha)
         loss = 0.5*(alpha.T.dot(P).dot(alpha)) - q.dot(alpha)
         return loss
@@ -139,10 +134,18 @@ class SVM():
         return cm
 
 
+<<<<<<< HEAD
 #cl = SVM(kernel=polynomial_kernel, C=0.0001, gamma=1)
 #cl.fit(X_train, y_train)
 #print(cl.get_loss(X_train, y_train))
 #cl.output()
+=======
+cl = SVM(kernel=polynomial_kernel, C=0.00000001, gamma=2)
+cl.fit(X_train, y_train)
+print(cl.accuracy(X_test, y_test))
+print(cl.get_loss(X_train, y_train))
+cl.output()
+>>>>>>> 0141da7f775a4c1d074457968720f25b6e4a0bd2
 
 def k_fold(X_train, y_train, C=10, gamma=2, folds=4):
     """
