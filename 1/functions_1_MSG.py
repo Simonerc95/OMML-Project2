@@ -134,18 +134,18 @@ class SVM():
         return cm
 
 
-<<<<<<< HEAD
+
 #cl = SVM(kernel=polynomial_kernel, C=0.0001, gamma=1)
 #cl.fit(X_train, y_train)
 #print(cl.get_loss(X_train, y_train))
 #cl.output()
-=======
+
 cl = SVM(kernel=polynomial_kernel, C=0.00000001, gamma=2)
 cl.fit(X_train, y_train)
 print(cl.accuracy(X_test, y_test))
 print(cl.get_loss(X_train, y_train))
 cl.output()
->>>>>>> 0141da7f775a4c1d074457968720f25b6e4a0bd2
+
 
 def k_fold(X_train, y_train, C=10, gamma=2, folds=4):
     """
