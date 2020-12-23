@@ -125,18 +125,33 @@ class SVM():
         print(self.opt_sol)
         
         
-    def decomp_method(self, X, y, q_value=10, num_iter=10, tol=4):
+    def decomp_method(self, X, y, q_value=10, num_iter=10):
         nfev = 0
         best_loss = 1000
 
         n_samples, n_features = X.shape
-        alpha_upt = np.zeros(n_samples)
+        alpha_k = np.zeros(n_samples)
+        alpha_k1 = alpha_k
         patience = 0
         K = self.kernel(X, X, self.gamma)
         t = time.time()
-        for c in range(num_iter):
 
-            W_index = np.random.choice(list(range(n_samples)), q_value, replace=False)
+        grad_q = -np.ones_like(y)
+        L_neg = set(alpha_k[(alpha_k < 1e-5) & (y==-1)])
+        L_pos = set(alpha_k[(alpha_k < 1e-5) & (y==1)])
+        U_neg = set(alpha_k[(alpha_k==self.C) & (y==-1)])
+        U_pos = set(alpha_k[(alpha_k==self.C) & (y==1)])
+        SV = set(alpha_k[(alpha_k > 1e-5) & (alpha_k < self.C)])
+        R = L_neg.union(U_pos).union(SV)
+        S = L_pos.union(U_neg).union(SV)
+        m_alpha = max((-grad_q*y)[list(R)])
+        M_alpha = min((-grad_q*y)[list(S)])
+        diff = m_alpha - M_alpha
+        idx = 0
+        while (diff > 0) and idx < num_iter:
+            
+            W_index = sorted((-grad_q*y)[list(R)], reverse=True)[:q_value//2] + \
+                      sorted((-grad_q*y)[list(S)], reverse=True)[:q_value//2]
             
             # Gram matrix
             P = matrix(np.outer(y[W_index], y[W_index]) * K[W_index, :][:, W_index])
@@ -147,43 +162,63 @@ class SVM():
             h = matrix(np.vstack((np.zeros((q_value, 1)), self.C * np.ones((q_value, 1)))))
     
     
-            # solve QP problem
+            # solve QP sub-problem
             solvers.options['show_progress'] = False
             solution = solvers.qp(P, q, G, h, A, b)
             #self.opt_sol = solution
             nfev += solution['iterations']
 
             a = np.array(solution['x']).flatten()
-            alpha_upt[W_index] = a
-            sv_ind = alpha_upt > 1e-10
-            a = alpha_upt[sv_ind]
-            sv = X[sv_ind]
-            sv_y = y[sv_ind]
-            ind = np.arange(len(alpha_upt))[sv_ind]
-            b = 0
-            for n in range(len(a)):
-                b += sv_y[n]
-                b -= np.sum(a * sv_y * K[ind[n], sv_ind])
-            b /= len(a)
+            alpha_k1[W_index] = a
+            
+            grad_q = grad_q + P.dot(alpha_k1-alpha_k) # updating gradient
+            alpha_k = alpha_k1
+            L_neg = set(alpha_k[(alpha_k < 1e-5) & (y==-1)])
+            L_pos = set(alpha_k[(alpha_k < 1e-5) & (y==1)])
+            U_neg = set(alpha_k[(alpha_k==self.C) & (y==-1)])
+            U_pos = set(alpha_k[(alpha_k==self.C) & (y==1)])
+            SV = set(alpha_k[(alpha_k > 1e-5) & (alpha_k < self.C)])
+            R = L_neg.union(U_pos).union(SV)
+            S = L_pos.union(U_neg).union(SV)
+            m_alpha = max((-grad_q*y)[list(R)])
+            M_alpha = min((-grad_q*y)[list(S)])
+            diff = m_alpha - M_alpha
+            
+# =============================================================================
+#             sv_ind = alpha_k1 > 1e-5
+#             a = alpha[sv_ind]
+#             sv = X[sv_ind]
+#             sv_y = y[sv_ind]
+#             ind = np.arange(len(alpha))[sv_ind]
+#             b = 0
+#             for n in range(len(a)):
+#                 b += sv_y[n]
+#                 b -= np.sum(a * sv_y * K[ind[n], sv_ind])
+#             b /= len(a)
+# =============================================================================
 
-            current_loss = solution['dual objective']
-
-            if current_loss < best_loss:
-                patience = 0
-                self.a = alpha_upt[sv_ind]
-                self.sv = sv
-                self.sv_y = sv_y
-                # Intercept
-                self.b = b
-                best_loss = current_loss
-
-            else:
-                if patience == tol:
-                    break
-                patience +=1
+# =============================================================================
+#             current_loss = solution['dual objective']
+# 
+#             if current_loss < best_loss:
+#                 patience = 0
+#                 self.a = alpha_upt[sv_ind]
+#                 self.sv = sv
+#                 self.sv_y = sv_y
+#                 # Intercept
+#                 self.b = b
+#                 best_loss = current_loss
+# 
+#             else:
+#                 if patience == tol:
+#                     break
+# =============================================================================
+                
+            idx += 1
         self.fit_time = time.time() - t
         self.nfev = nfev
+        print(alpha_k)
 
 clf = SVM(C=10,gamma=5)
-clf.decomp_method(X_train, y_train, q_value=800, num_iter=500, tol=10)
+clf.decomp_method(X_train, y_train, q_value=800, num_iter=500)
 print(clf.accuracy(X_test, y_test))
