@@ -146,28 +146,27 @@ class SVM():
         U_neg = np.where((alpha_k >= self.C - tol) & (y==-1))[0]
         U_pos = np.where((alpha_k >= self.C - tol) & (y==1))[0]
         SV = np.where((alpha_k > tol) & (alpha_k < self.C))[0]
-        S = np.array(L_neg.tolist() + U_pos.tolist() + SV.tolist())
-        R = np.array(L_pos.tolist() + U_neg.tolist() + SV.tolist())
+        S = L_neg.tolist() + U_pos.tolist() + SV.tolist()
+        R = L_pos.tolist() + U_neg.tolist() + SV.tolist()
         #assert len(R) == len(set(R)), 'doubles'
-        m_alpha = max((-grad_q*y)[R,])
+        m_alpha = max((-grad_q*y)[R])
         #print('m_alpha', m_alpha)
-        M_alpha = min((-grad_q*y)[S,])
+        M_alpha = min((-grad_q*y)[S])
         #print('M_alpha', M_alpha)
         diff = m_alpha - M_alpha
         #print('diff', diff)
         idx = 0
         while (diff > 0) and idx < num_iter:
             
-            #W_index = R[np.argsort((-grad_q*y)[R,], axis=0)[:q_value//2][::-1]].flatten().tolist() + \
-                      #S[np.argsort((-grad_q*y)[S,], axis=0)[:q_value//2]].flatten().tolist() 
-                      
-            W_index = np.random.choice(R,5).tolist() + np.random.choice(S,5).tolist()
-            #print('grad_S',np.argsort((-grad_q*y)[R,], axis=0)[:q_value//2])
+            W_index = np.argsort((-grad_q*y)[R])[:q_value//2][::-1].tolist() + \
+                      np.argsort((-grad_q*y)[S])[:q_value//2].tolist()
+            print(type(W_index))   
+            #print('grad_S',np.sort((-grad_q*y)[S])[:q_value//2])
             #print('w_index', W_index)
             
             # Gram matrix
-            #print('outer', np.outer(y[W_index,], y[W_index,]).shape)
-            #print('k', K[W_index, :][:, W_index].shape)
+            print('outer', np.outer(y[W_index,], y[W_index,]).shape)
+            print('k', K[W_index, :][:, W_index].shape)
             P = matrix(np.outer(y[W_index,], y[W_index,]) * K[W_index, :][:, W_index])
             q = matrix(np.ones(q_value) * -1)
             A = matrix(y[W_index,], (1, q_value))
@@ -184,24 +183,24 @@ class SVM():
 
             a = np.array(solution['x']).flatten()
             #print(a)
-            alpha_k1[W_index,] = a.reshape((q_value,1))
+            alpha_k1[W_index] = a
             
             #print('graddot', np.array(P).dot(alpha_k1[W_index]-alpha_k[W_index]))
             #print('grad-upt', alpha_k1[W_index]-alpha_k[W_index])
-            grad_q[W_index,] = grad_q[W_index,] + (np.array(P).dot(alpha_k1[W_index,]-alpha_k[W_index,])) # updating gradient
-            alpha_k[W_index,] = alpha_k1[W_index,]
+            grad_q[W_index] = grad_q[W_index] + (np.array(P).dot(alpha_k1[W_index]-alpha_k[W_index])) # updating gradient
+            alpha_k[W_index] = alpha_k1[W_index]
             L_neg = np.where((alpha_k < tol) & (y==-1))[0]
             L_pos = np.where((alpha_k < tol) & (y==1))[0]
             U_neg = np.where((alpha_k >= self.C - tol) & (y==-1))[0]
             U_pos = np.where((alpha_k >= self.C - tol) & (y==1))[0]
             SV = np.where((alpha_k > tol) & (alpha_k < self.C))[0]
-            S = np.array(L_neg.tolist() + U_pos.tolist() + SV.tolist())
-            R = np.array(L_pos.tolist() + U_neg.tolist() + SV.tolist())
+            S = L_neg.tolist() + U_pos.tolist() + SV.tolist()
+            R = L_pos.tolist() + U_neg.tolist() + SV.tolist()
             #assert len(R) == len(set(R)), 'doubles'
-            m_alpha = max((-grad_q*y)[R,])
-            M_alpha = min((-grad_q*y)[S,])
+            m_alpha = max((-grad_q*y)[R])
+            M_alpha = min((-grad_q*y)[S])
             diff = m_alpha - M_alpha
-            print(diff)
+            #print(diff)
             
 # =============================================================================
 #             sv_ind = alpha_k1 > 1e-5
@@ -237,8 +236,8 @@ class SVM():
         self.fit_time = time.time() - t
         self.nfev = nfev
         print('iter', idx)
-        #print(alpha_k[np.where(alpha_k !=0)[0]])
+        print(alpha_k[np.where(alpha_k !=0)[0]])
 
 clf = SVM(C=2,gamma=2)
-clf.decomp_method(X_train, y_train, q_value=10, num_iter=100)
+clf.decomp_method(X_train, y_train, q_value=2, num_iter=100)
 #print(clf.accuracy(X_test, y_test))
