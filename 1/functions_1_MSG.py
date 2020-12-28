@@ -1,5 +1,6 @@
 import numexpr as ne
 from Project_2_dataExtraction import *
+from matplotlib import pyplot as plt
 from cvxopt import matrix
 from cvxopt import solvers
 import time
@@ -20,20 +21,19 @@ def rbf_kernel(X, z, gamma):
         'gamma': gamma
     })
 
-
+ #
+ # def polynomial_kernel(X, z, gamma):
+ #    assert gamma >= 1, 'gamma for polynomial kernel must be >= 1'
+ #    return (X.dot(z.T) + 1) ** gamma
 def polynomial_kernel(X, z, gamma):
     assert gamma >= 1, 'gamma for polynomial kernel must be >= 1'
-    return (X.dot(z.T) + 1) ** gamma
-
+    return (X.dot(z.T)) ** gamma
 
 full_data = np.vstack((xLabel3, xLabel8))
 data_norm = full_data / 255  # (2000x784)
 
 full_labels = np.hstack((-np.ones((1000,)), np.ones((1000,))))  # (2000,)
 
-
-a = np.ones((2000,))
-b = 0.5
 N = len(data_norm)
 indices_train = np.random.choice(list(range(N)), int(0.8 * N), replace=False)
 X_train = data_norm[indices_train]
@@ -42,22 +42,7 @@ y_train = full_labels[indices_train]
 y_test = np.delete(full_labels, indices_train, axis=0)
 
 
-# y = y_train.reshape(-1,1) * 1.
-#
-# P = matrix(y.dot((poly_kernel(X_train, X_train, 2).dot(y) * 1.).T), tc='d')
-# q = matrix(-np.ones((y_train.shape[0])), tc='d')
-# G = matrix(np.vstack([np.identity(X_train.shape[0]), -np.identity(X_train.shape[0])]), tc='d')
-# c = 10
-# C = np.ones(X_train.shape[0]) * c
-# h = matrix(np.hstack([C, np.zeros(X_train.shape[0]).T]), tc='d')
-# A = matrix(y_train.reshape(1,-1), tc='d')
-# b = matrix(np.zeros(1), tc='d')
 
-#
-#
-# dic = solvers.qp(P, q, G, h, A, b)
-# arr = np.array(dic['x'])
-# print(len(arr[arr>1e-4]))
 
 
 class SVM():
@@ -69,13 +54,13 @@ class SVM():
     def fit(self, X, y):
         start = time.time()
         n_samples, n_features = X.shape
-
+        tol = 1e-6
         # Gram matrix
         K = self.kernel(X, X, self.gamma)
 
         P = matrix((np.outer(y, y) * K))
         q = matrix(np.ones(n_samples) * -1)
-        A = matrix(y, (1, n_samples))
+        A = matrix(y.dot(np.identity(len(y))), (1, n_samples))
         b = matrix(0.0)
         G = matrix(np.vstack((-1*np.identity(n_samples), np.identity(n_samples))))
         h = matrix(np.vstack((np.zeros((n_samples, 1)), self.C*np.ones((n_samples, 1)))))
@@ -88,7 +73,8 @@ class SVM():
         a = self.alpha
 
         # Support vectors have non zero lagrange multipliers
-        sv = a > 1e-10
+        sv = a > tol
+        print(sum(sv))
         ind = np.arange(len(a))[sv]
         self.a = a[sv]
         self.sv = X[sv]
@@ -113,16 +99,16 @@ class SVM():
         y_pred = self.predict(X)
         return np.sum(y == y_pred) / len(y)
 
-    def get_loss(self, X, y):
+    def get_objective(self, X, y):
         n_samples, n_features = X.shape
 
         # Gram matrix
         K = self.kernel(X, X, self.gamma)
-        P = matrix((np.outer(y, y) * K))
+        P = matrix(np.outer(y, y) * K)
         q = np.ones((1, n_samples))
         alpha = np.array(self.alpha)
-        loss = 0.5*(alpha.T.dot(P).dot(alpha)) - q.dot(alpha)
-        return loss
+        obj = 0.5*(alpha.T.dot(P).dot(alpha)) - q.dot(alpha)
+        return obj
 
     def output(self):
         print(self.opt_sol)
@@ -133,18 +119,6 @@ class SVM():
         cm = confusion_matrix(y, y_pred)
         return cm
 
-
-
-#cl = SVM(kernel=polynomial_kernel, C=0.0001, gamma=1)
-#cl.fit(X_train, y_train)
-#print(cl.get_loss(X_train, y_train))
-#cl.output()
-
-cl = SVM(kernel=polynomial_kernel, C=0.00000001, gamma=2)
-cl.fit(X_train, y_train)
-print(cl.accuracy(X_test, y_test))
-print(cl.get_loss(X_train, y_train))
-cl.output()
 
 
 def k_fold(X_train, y_train, C=10, gamma=2, folds=4):
@@ -173,47 +147,42 @@ def k_fold(X_train, y_train, C=10, gamma=2, folds=4):
 
     return accuracy
 
+#
+# def GridSearch(X_train, y_train, X_test, y_test, L_C=1, U_C=10, L_gamma=1, U_gamma=10):
+#     start = time.time()
+#
+#     gammas = range(L_gamma, U_gamma+1)
+#     Cs = range(L_C, U_C+1)
+#     train_accs = np.zeros((len(Cs), len(gammas)))
+#     test_accs = np.zeros_like(train_accs)
+#     best_acc = 0
+#     best_params = {'C':None, 'gamma':None}
+#     for i, ci in enumerate(Cs):
+#         for j, g in enumerate(gammas):
+#             acc = k_fold(X_train, y_train, C=ci, gamma=g, folds=4)
+#             if acc > best_acc:
+#                 best_acc = acc
+#                 best_params['C'] = ci
+#                 best_params['gamma'] = g
+#             clf = SVM(kernel=polynomial_kernel, gamma=g, C=ci)
+#             clf.fit(X_train, y_train)
+#             train_accs[i][j] = clf.accuracy(X_train, y_train)
+#             test_accs[i][j] = clf.accuracy(X_test, y_test)
+#
+#     plot3D(Cs, gammas, train_accs, test_accs)
+#     print(f'elapsed time: {round(time.time() - start,2)}')
+#     return best_params, train_accs, test_accs
+#
 
-def GridSearch(X_train, y_train, X_test, y_test, L_C=1, U_C=10, L_gamma=1, U_gamma=10):
-    start = time.time()
 
-    gammas = range(L_gamma, U_gamma+1)
-    Cs = range(L_C, U_C+1)
-    train_accs = np.zeros((len(Cs), len(gammas)))
-    test_accs = np.zeros_like(train_accs)
-    best_acc = 0
-    best_params = {'C':None, 'gamma':None}
-    for i, ci in enumerate(Cs):
-        for j, g in enumerate(gammas):
-            acc = k_fold(X_train, y_train, C=ci, gamma=g, folds=4)
-            if acc > best_acc:
-                best_acc = acc
-                best_params['C'] = ci
-                best_params['gamma'] = g
-            clf = SVM(kernel=polynomial_kernel, gamma=g, C=ci)
-            clf.fit(X_train, y_train)
-            train_accs[i][j] = clf.accuracy(X_train, y_train)
-            test_accs[i][j] = clf.accuracy(X_test, y_test)
-            
-    plot3D(Cs, gammas, train_accs, test_accs)
-    print(f'elapsed time: {round(time.time() - start,2)}')
-    return best_params, train_accs, test_accs
-
-def plot3D(Cs, gammas, train_accs, test_accs):
-    
-    x = Cs
-    y = gammas
-    fig = plt.figure(figsize=(8, 6))
-
-    ax = plt.axes(projection='3d')
-    x_1, x_2 = np.meshgrid(x, y)
-    ax.plot_surface(x_1, x_2, z_.reshape(x_1.shape), rstride=1, cstride=1,
-                    cmap='gist_rainbow_r', edgecolor='none')
-    ax.set_title('surface')
-    
 
 
 #best_params, train_accs, test_accs = GridSearch(X_train, y_train, X_test, y_test, U_C=2, U_gamma=2)
 #print(best_params)
 #print(train_accs)
 #print(test_accs)
+cl = SVM(kernel=polynomial_kernel, C=10, gamma=2)
+cl.fit(X_train, y_train)
+print(cl.accuracy(X_test,  y_test))
+print(cl.get_objective(X_train,  y_train))
+cl.output()

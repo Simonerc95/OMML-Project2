@@ -4,7 +4,7 @@ from cvxopt import matrix
 from cvxopt import solvers
 import time
 import numpy as np
-
+import cvxopt.msk as msk
 seed = 1679838
 np.random.seed(seed)
 
@@ -30,10 +30,9 @@ full_data = np.vstack((xLabel3, xLabel8))
 data_norm = full_data / 255  # (2000x784)
 
 full_labels = np.hstack((-np.ones((1000,)), np.ones((1000,))))  # (2000,)
-
-
-a = np.ones((2000,))
-b = 0.5
+print(np.unique(full_labels, return_counts=True))
+# a = np.ones((2000,))
+# b = 0.5
 N = len(data_norm)
 indices_train = np.random.choice(list(range(N)), int(0.8 * N), replace=False)
 X_train = data_norm[indices_train]
@@ -41,6 +40,8 @@ X_test = np.delete(data_norm, indices_train, axis=0)
 y_train = full_labels[indices_train]
 y_test = np.delete(full_labels, indices_train, axis=0)
 
+print('TRAIN ', np.unique(y_train, return_counts=True))
+print('TEST ',np.unique(y_test, return_counts=True))
 
 # y = y_train.reshape(-1,1) * 1.
 #
@@ -126,18 +127,17 @@ class SVM():
         print(self.opt_sol)
         
         
-    def decomp_method(self, X, y, q_value=10, num_iter=10):
+    def decomp_method(self, X, y, tol = 1e-6, q_value=10, num_iter=10):
         nfev = 0
-        tol = 1e-5
-        y = y.reshape(1600,1)
+        y = y#.reshape(1600,1)
 
         n_samples, n_features = X.shape
         alpha_k = np.zeros(y.shape)
       
         alpha_k1 = np.zeros(y.shape)
 
-        K = self.kernel(X, X, self.gamma)
-        K = np.array(K)
+        # K = self.kernel(X, X, self.gamma)
+        # K = np.array(K)
         t = time.time()
    
         grad_q = -np.ones_like(y)
@@ -148,97 +148,123 @@ class SVM():
         SV = np.where((alpha_k > tol) & (alpha_k < self.C))[0]
         S = np.array(L_neg.tolist() + U_pos.tolist() + SV.tolist())
         R = np.array(L_pos.tolist() + U_neg.tolist() + SV.tolist())
-        #assert len(R) == len(set(R)), 'doubles'
         m_alpha = max((-grad_q*y)[R,])
-        #print('m_alpha', m_alpha)
         M_alpha = min((-grad_q*y)[S,])
-        #print('M_alpha', M_alpha)
         diff = m_alpha - M_alpha
-        #print('diff', diff)
         idx = 0
-        while (diff > 0) and idx < num_iter:
+        
+        while (diff > 5e-3) and idx < num_iter:
             
-            #W_index = R[np.argsort((-grad_q*y)[R,], axis=0)[:q_value//2][::-1]].flatten().tolist() + \
-                      #S[np.argsort((-grad_q*y)[S,], axis=0)[:q_value//2]].flatten().tolist() 
-                      
-            W_index = np.random.choice(R,5).tolist() + np.random.choice(S,5).tolist()
-            #print('grad_S',np.argsort((-grad_q*y)[R,], axis=0)[:q_value//2])
-            #print('w_index', W_index)
-            
-            # Gram matrix
-            #print('outer', np.outer(y[W_index,], y[W_index,]).shape)
-            #print('k', K[W_index, :][:, W_index].shape)
-            P = matrix(np.outer(y[W_index,], y[W_index,]) * K[W_index, :][:, W_index])
-            q = matrix(np.ones(q_value) * -1)
-            A = matrix(y[W_index,], (1, q_value))
-            b = matrix(0.0)
-            G = matrix(np.vstack((-1 * np.identity(q_value), np.identity(q_value))))
-            h = matrix(np.vstack((np.zeros((q_value, 1)), self.C * np.ones((q_value, 1)))))
-    
-    
-            # solve QP sub-problem
-            solvers.options['show_progress'] = False
-            solution = solvers.qp(P, q, G, h, A, b)
-            #self.opt_sol = solution
-            nfev += solution['iterations']
+            R_index = R[np.argsort((-grad_q*y)[R,], axis=0)[::-1][:q_value//2]].flatten().tolist()
+            S_index = S[np.argsort((-grad_q*y)[S,], axis=0)[:q_value//2]].flatten().tolist()
+            W_index = R_index + S_index
 
-            a = np.array(solution['x']).flatten()
-            #print(a)
-            alpha_k1[W_index,] = a.reshape((q_value,1))
-            
-            #print('graddot', np.array(P).dot(alpha_k1[W_index]-alpha_k[W_index]))
-            #print('grad-upt', alpha_k1[W_index]-alpha_k[W_index])
-            grad_q[W_index,] = grad_q[W_index,] + (np.array(P).dot(alpha_k1[W_index,]-alpha_k[W_index,])) # updating gradient
-            alpha_k[W_index,] = alpha_k1[W_index,]
+            P = matrix(np.outer(y[W_index,], y[W_index,]) * self.kernel(X[W_index, :], X[W_index,:], self.gamma), tc='d')
+            Q = np.outer(y, y[W_index,]) * self.kernel(X, X[W_index, :], self.gamma)
+            q = matrix(np.delete(Q, W_index, axis=0).T.dot(np.delete(alpha_k, W_index, axis=0)) - np.ones(q_value), (q_value, 1), tc='d')#matrix(grad_q[W_index]) # matrix(np.ones(q_value) * -1)
+            A = matrix(y[W_index,].dot(np.identity(q_value)), (1, q_value), tc='d')
+            b = matrix(-np.delete(y, W_index, axis=0).T.dot(np.delete(alpha_k, W_index, axis=0)), tc='d')
+            G = matrix(np.vstack((-1 * np.identity(q_value), np.identity(q_value))), tc='d')
+            h = matrix(np.vstack((np.zeros((q_value, 1)), (self.C) * np.ones((q_value, 1)))), tc='d')
+
+            solvers.options['show_progress'] = False
+            solution = solvers.qp(P=P, q=q, G=G, h=h, A=A, b=b, solver=msk)
+
+            nfev += solution['iterations']
+            print(solution)
+            exit()
+            alpha_k1[W_index,] = np.array(solution['x']).flatten()
+            alpha_k1[alpha_k1<tol] = 0
+            grad_q += np.sum(Q * (alpha_k1[W_index,]-alpha_k[W_index,]), axis=1)
+            alpha_k[W_index,] = alpha_k1[W_index,].copy()
             L_neg = np.where((alpha_k < tol) & (y==-1))[0]
             L_pos = np.where((alpha_k < tol) & (y==1))[0]
             U_neg = np.where((alpha_k >= self.C - tol) & (y==-1))[0]
             U_pos = np.where((alpha_k >= self.C - tol) & (y==1))[0]
-            SV = np.where((alpha_k > tol) & (alpha_k < self.C))[0]
-            S = np.array(L_neg.tolist() + U_pos.tolist() + SV.tolist())
-            R = np.array(L_pos.tolist() + U_neg.tolist() + SV.tolist())
-            #assert len(R) == len(set(R)), 'doubles'
+            SV = np.where((alpha_k >= tol) & (alpha_k < self.C - tol))[0]
+            S = np.array(list(set(L_neg.tolist() + U_pos.tolist() + SV.tolist())))
+            R = np.array(list(set(L_pos.tolist() + U_neg.tolist() + SV.tolist())))
             m_alpha = max((-grad_q*y)[R,])
             M_alpha = min((-grad_q*y)[S,])
             diff = m_alpha - M_alpha
             print(diff)
-            
-# =============================================================================
-#             sv_ind = alpha_k1 > 1e-5
-#             a = alpha[sv_ind]
-#             sv = X[sv_ind]
-#             sv_y = y[sv_ind]
-#             ind = np.arange(len(alpha))[sv_ind]
-#             b = 0
-#             for n in range(len(a)):
-#                 b += sv_y[n]
-#                 b -= np.sum(a * sv_y * K[ind[n], sv_ind])
-#             b /= len(a)
-# =============================================================================
-
-# =============================================================================
-#             current_loss = solution['dual objective']
-# 
-#             if current_loss < best_loss:
-#                 patience = 0
-#                 self.a = alpha_upt[sv_ind]
-#                 self.sv = sv
-#                 self.sv_y = sv_y
-#                 # Intercept
-#                 self.b = b
-#                 best_loss = current_loss
-# 
-#             else:
-#                 if patience == tol:
-#                     break
-# =============================================================================
-                
             idx += 1
+            c1 = diff > 1e-2
+            c2 = y.T.dot(alpha_k) < tol
+            c3 = idx < num_iter
+            
+            
+            
+        print(f"\ndiff > tol: {c1} \ny.T.dot(alpha_k) < tol: {c2} \nidx < num_iter: {c3}")
+        self.iterations = idx
+        print(self.iterations)
         self.fit_time = time.time() - t
         self.nfev = nfev
-        print('iter', idx)
-        #print(alpha_k[np.where(alpha_k !=0)[0]])
+        alpha_k = alpha_k.flatten()
+        sv = alpha_k > 0
+        self.sv = X[sv,:]
+        self.sv_y = y[sv]
+        self.a = alpha_k[sv]
+        # print('iter', idx)
+ 
+        self.b = np.mean(self.sv_y - (self.a * self.sv_y).dot(self.kernel(X[sv], X[sv], self.gamma)))
+        # print('Second b: ', self.b)    
 
-clf = SVM(C=2,gamma=2)
-clf.decomp_method(X_train, y_train, q_value=10, num_iter=100)
-#print(clf.accuracy(X_test, y_test))
+
+clf = SVM(C=10, gamma=2)
+clf.decomp_method(X_train, y_train, q_value=12, num_iter=10000)
+print(clf.predict(X_test))
+print(clf.accuracy(X_test, y_test))
+exit()
+#%%
+# clf = SVM(C=2,gamma=2)
+# clf.decomp_method(X_train, y_train, q_value=800, num_iter=1000)
+# print(clf.accuracy(X_test, y_test))
+
+# # len(X_train[clf.a.flatten() >0, :])
+# # clf.a#[None, :]
+# # len(clf.a * clf.sv_y)
+
+# clf2 = SVM(C=2,gamma=2)
+# clf2.fit(X_train, y_train)
+# print(clf2.accuracy(X_test, y_test))
+
+
+from joblib import Parallel, delayed
+
+def get_svm(c, g, q, i, ker):
+    clf = SVM(C=c,gamma=g, kernel=ker)
+    clf.decomp_method(X_train, y_train, q_value=q, num_iter=i)
+    return clf.accuracy(X_test, y_test)
+
+r = range(2,100, 2)
+out = {}
+gam = (2, 10,)
+j = 0
+
+import matplotlib.pyplot as plt
+for  k in (polynomial_kernel,): #, rbf_kernel,):
+    out[k.__name__] = Parallel(n_jobs=-1, verbose=10)\
+        (delayed(get_svm)(c=2, g=gam[j], q=x, i=100000, ker=k) for x in r)
+    j += 1
+    plt.plot(list(r),out[k.__name__])
+    plt.title(f'{k.__name__.title()} Kernel')
+    plt.ylim(0.6, 1)
+    plt.show()
+exit()
+#%%
+def moving_average(x, k):
+    return np.convolve(x, np.ones(k), 'valid') / k
+
+k = 21
+plt.plot(list(r[int(k/2):-int(k/2)]), moving_average(out, k))
+plt.show()
+#%%
+def get_svm2(c, g, q, i, tol):
+    clf = SVM(C=c,gamma=g)
+    clf.decomp_method(X_train, y_train, q_value=q, num_iter=i)
+    return clf.accuracy(X_test, y_test)
+
+r = range(2,100,10)
+out = Parallel(n_jobs=-1, verbose=10)\
+        (delayed(get_svm2)(c=2, g=2, q=2, i=1000, tol=x) for x in r)
