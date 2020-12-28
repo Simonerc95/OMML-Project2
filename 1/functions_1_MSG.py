@@ -10,6 +10,7 @@ from cvxopt import matrix
 from cvxopt import solvers
 import time
 from sklearn.metrics import confusion_matrix
+import numpy as np
 
 seed = 1679838
 np.random.seed(seed)
@@ -31,6 +32,7 @@ def polynomial_kernel(X, z, gamma):
     assert gamma >= 1, 'gamma for polynomial kernel must be >= 1'
     return (X.dot(z.T) + 1) ** gamma
 
+
 full_data = np.vstack((xLabel3, xLabel8))
 data_norm = full_data / 255  # (2000x784)
 
@@ -42,8 +44,6 @@ X_train = data_norm[indices_train]
 X_test = np.delete(data_norm, indices_train, axis=0)
 y_train = full_labels[indices_train]
 y_test = np.delete(full_labels, indices_train, axis=0)
-
-
 
 
 
@@ -89,6 +89,7 @@ class SVM():
             self.b -= np.sum(self.a * self.sv_y * K[ind[n], sv])
         self.b /= len(self.a)
         self.cpu_time = time.time() - start
+        #print('cpu time', self.cpu_time)
 
         '''
         KKT Condition check
@@ -125,16 +126,12 @@ class SVM():
         alpha = np.array(self.alpha)
         obj = 0.5*(alpha.T.dot(P).dot(alpha)) - q.dot(alpha)
         return obj
-
-    def output(self):
-        print(self.opt_sol)
         
     def conf_mat(self, X, y):
         y_pred = self.predict(X)
         y_pred = y_pred.flatten()
         cm = confusion_matrix(y, y_pred)
         return cm
-
 
 
 def k_fold(X_train, y_train, C=10, gamma=2, folds=4):

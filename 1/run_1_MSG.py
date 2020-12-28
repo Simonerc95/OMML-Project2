@@ -18,5 +18,6 @@ print(f'C = {best_params["C"]}, gamma = {best_params["gamma"]}, {used_kernel.__n
 print(f'Classification rate on the training set = {train_acc}')
 print(f'Classification rate on the test_set = {test_acc}')
 print(f'Counfusion matrix: \n {cm}')
+print(f'Time for the optimization: {cl.cpu_time}')
 print(f'Num iter: {n_iter}')
-print(f'Difference m(alpha) - M(alpha): {cl.diff})')
+print(f'Difference m(alpha) - M(alpha): {cl.diff}')

@@ -1,10 +1,21 @@
-import numpy as np
+from functions_2_MSG import *
 
-alpha = np.array([0,0])
-alpha_1 = np.array([1,1])
-q = np.array([[1,2],[2,1]])
-p = q.dot(alpha_1-alpha)
+used_kernel = polynomial_kernel
+best_params = {'C': 2, 'gamma': 2}
+q_value = 10
 
-l = np.array([[ 0,  3],
-       [12, 15]])
-print(l.shape)
+cl = SVM(kernel=used_kernel, **best_params)
+cl.decomp_method(X_train, y_train, q_value=q_value, num_iter=10000)
+train_acc = cl.accuracy(X_train, y_train)
+test_acc = cl.accuracy(X_test, y_test)
+cm = cl.conf_mat(X_test, y_test)
+n_iter = cl.iterations
+
+print(f'C = {best_params["C"]}, gamma = {best_params["gamma"]}, {used_kernel.__name__}')
+print(f'Classification rate on the training set = {train_acc}')
+print(f'Classification rate on the test_set = {test_acc}')
+print(f'Counfusion matrix: \n {cm}')
+print(f'Time for the optimization: {cl.fit_time}')
+print(f'Num iter: {n_iter}')
+print(f'Difference m(alpha) - M(alpha): {cl.diff}')
+print(f'Value of q: {q_value}')
