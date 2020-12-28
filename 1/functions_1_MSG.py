@@ -1,4 +1,9 @@
 import numexpr as ne
+import sys
+import os
+os.chdir(os.path.dirname(__file__))
+sys.path.append(os.pardir)
+
 from Project_2_dataExtraction import *
 from matplotlib import pyplot as plt
 from cvxopt import matrix

@@ -1,10 +1,16 @@
 import numexpr as ne
+
+import sys
+import os
+os.chdir(os.path.dirname(__file__))
+sys.path.append(os.pardir)
+
 from Project_2_dataExtraction import *
 from cvxopt import matrix
 from cvxopt import solvers
 import time
 import numpy as np
-import cvxopt.msk as msk
+
 seed = 1679838
 np.random.seed(seed)
 
@@ -24,6 +30,7 @@ def rbf_kernel(X, z, gamma):
 def polynomial_kernel(X, z, gamma):
     assert gamma >= 1, 'gamma for polynomial kernel must be >= 1'
     return (X.dot(z.T) + 1) ** gamma
+
 
 
 full_data = np.vstack((xLabel3, xLabel8))
@@ -66,44 +73,6 @@ class SVM():
         self.kernel = kernel
         self.C = C
         self.gamma = gamma
-
-    def fit(self, X, y):
-        n_samples, n_features = X.shape
-
-        # Gram matrix
-        K = self.kernel(X, X, self.gamma)
-
-        P = matrix(np.outer(y, y) * K)
-        q = matrix(np.ones(n_samples) * -1)
-        A = matrix(y, (1, n_samples))
-        b = matrix(0.0)
-        G = matrix(np.vstack((-1 * np.identity(n_samples), np.identity(n_samples))))
-        h = matrix(np.vstack((np.zeros((n_samples, 1)), self.C * np.ones((n_samples, 1)))))
-
-
-        # solve QP problem
-        solvers.options['show_progress'] = False
-        solution = solvers.qp(P, q, G, h, A, b)
-        self.opt_sol = solution
-
-        a = np.array(solution['x']).flatten()
-
-        # Support vectors have non zero lagrange multipliers
-        sv = a > 1e-5
-        ind = np.arange(len(a))[sv]
-        self.a = a[sv]
-        self.sv = X[sv]
-        self.sv_y = y[sv]
-        # print("%d support vectors out of %d points" % (len(self.a), n_samples))
-
-        # Intercept
-        self.b = 0
-        for n in range(len(self.a)):
-            self.b += self.sv_y[n]
-            self.b -= np.sum(self.a * self.sv_y * K[ind[n], sv])
-        self.b /= len(self.a)
-
-        # Weight vector
 
     def predict(self, X, a=None, sv=None, sv_y=None, b=None):
         k = self.kernel
@@ -168,11 +137,10 @@ class SVM():
             h = matrix(np.vstack((np.zeros((q_value, 1)), (self.C) * np.ones((q_value, 1)))), tc='d')
 
             solvers.options['show_progress'] = False
-            solution = solvers.qp(P=P, q=q, G=G, h=h, A=A, b=b, solver=msk)
+            solution = solvers.qp(P=P, q=q, G=G, h=h, A=A, b=b)
 
             nfev += solution['iterations']
-            print(solution)
-            exit()
+
             alpha_k1[W_index,] = np.array(solution['x']).flatten()
             alpha_k1[alpha_k1<tol] = 0
             grad_q += np.sum(Q * (alpha_k1[W_index,]-alpha_k[W_index,]), axis=1)
@@ -245,7 +213,7 @@ j = 0
 import matplotlib.pyplot as plt
 for  k in (polynomial_kernel,): #, rbf_kernel,):
     out[k.__name__] = Parallel(n_jobs=-1, verbose=10)\
-        (delayed(get_svm)(c=2, g=gam[j], q=x, i=100000, ker=k) for x in r)
+        (delayed(get_svm)(c=2, g=gam[j], q=x, i=1000, ker=k) for x in r)
     j += 1
     plt.plot(list(r),out[k.__name__])
     plt.title(f'{k.__name__.title()} Kernel')
