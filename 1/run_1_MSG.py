@@ -2,10 +2,15 @@ from functions_1_MSG import *
 
 gridsearch = False
 used_kernel = polynomial_kernel
-best_params = {'C': 2, 'gamma': 2}
+best_params = {'C': 0.01, 'gamma': 2}
 
 if gridsearch:
-    best_params, train_accs, test_accs = GridSearch(X_train, y_train, X_test, y_test, U_C=2, U_gamma=2)
+    cc = np.power(10, np.arange(-5., 2.))
+    cc = np.concatenate([cc, np.arange(1.,11.)])
+    gg = list(range(1, 4))
+
+    best_params = GridSearch(X_train, y_train, cc, gg, kernel=used_kernel)
+
 
 cl = SVM(kernel=used_kernel, **best_params)
 cl.fit(X_train, y_train)

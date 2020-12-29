@@ -1,7 +1,7 @@
 from functions_4_MSG import *
 
 used_kernel = polynomial_kernel
-best_params = {'C': 2, 'gamma': 2}
+best_params = {'C': 0.01, 'gamma': 2}
 
 cl = SVMMulticlass(kernel=used_kernel, **best_params)
 cl.fit_multi(X_train, y_train)

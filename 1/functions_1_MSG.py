@@ -5,7 +5,8 @@ os.chdir(os.path.dirname(__file__))
 sys.path.append(os.pardir)
 
 from Project_2_dataExtraction import *
-from matplotlib import pyplot as plt
+from joblib import Parallel, delayed
+import pandas as pd
 from cvxopt import matrix
 from cvxopt import solvers
 import time
@@ -17,6 +18,9 @@ np.random.seed(seed)
 
 
 def rbf_kernel(X, z, gamma):
+    '''
+    Used for comparison, but not for final evaluations
+    '''
     assert gamma > 0., 'gamma for RBF kernel must be > 0'
     X_norm = np.sum(X ** 2, axis=-1)
     y_norm = np.sum(z ** 2, axis=-1)
@@ -29,6 +33,9 @@ def rbf_kernel(X, z, gamma):
 
 
 def polynomial_kernel(X, z, gamma):
+    '''
+    Kernel used for whole project
+    '''
     assert gamma >= 1, 'gamma for polynomial kernel must be >= 1'
     return (X.dot(z.T) + 1) ** gamma
 
@@ -57,15 +64,16 @@ class SVM():
         start = time.time()
         n_samples, n_features = X.shape
         tol = 1e-6
+
         # Gram matrix
         K = self.kernel(X, X, self.gamma)
 
-        P = matrix((np.outer(y, y) * K))
-        q = matrix(np.ones(n_samples) * -1)
-        A = matrix(y.dot(np.identity(len(y))), (1, n_samples))
-        b = matrix(0.0)
-        G = matrix(np.vstack((-1*np.identity(n_samples), np.identity(n_samples))))
-        h = matrix(np.vstack((np.zeros((n_samples, 1)), self.C*np.ones((n_samples, 1)))))
+        P = matrix((np.outer(y, y) * K), tc='d')
+        q = matrix(np.ones(n_samples) * -1, tc='d')
+        A = matrix(y.dot(np.identity(n_samples)), (1, n_samples), tc='d')
+        b = matrix(0.0, tc='d')
+        G = matrix(np.vstack((-1*np.identity(n_samples), np.identity(n_samples))), tc='d')
+        h = matrix(np.vstack((np.zeros((n_samples, 1)), self.C*np.ones((n_samples, 1)))), tc='d')
 
         # solve QP problem
         solvers.options['show_progress'] = False
@@ -80,7 +88,6 @@ class SVM():
         self.a = a[sv]
         self.sv = X[sv]
         self.sv_y = y[sv]
-        # print("%d support vectors out of %d points" % (len(self.a), n_samples))
 
         # Intercept
         self.b = 0
@@ -89,7 +96,7 @@ class SVM():
             self.b -= np.sum(self.a * self.sv_y * K[ind[n], sv])
         self.b /= len(self.a)
         self.cpu_time = time.time() - start
-        #print('cpu time', self.cpu_time)
+
 
         '''
         KKT Condition check
@@ -107,6 +114,11 @@ class SVM():
         M_alpha = min((-grad_q * y)[S,])
         self.diff = m_alpha - M_alpha
 
+        # Evaluation of objective function
+        # e = np.ones_like(a)
+        # print(f'dual objective  with formula',
+        #       0.5 * (a.T.dot(P).dot(a)) - e.T.dot(a))
+
 
     def predict(self, X):
         k = self.kernel
@@ -115,17 +127,6 @@ class SVM():
     def accuracy(self, X, y):
         y_pred = self.predict(X)
         return np.sum(y == y_pred) / len(y)
-
-    def get_objective(self, X, y):
-        n_samples, n_features = X.shape
-
-        # Gram matrix
-        K = self.kernel(X, X, self.gamma)
-        P = matrix(np.outer(y, y) * K)
-        q = np.ones((1, n_samples))
-        alpha = np.array(self.alpha)
-        obj = 0.5*(alpha.T.dot(P).dot(alpha)) - q.dot(alpha)
-        return obj
         
     def conf_mat(self, X, y):
         y_pred = self.predict(X)
@@ -134,7 +135,7 @@ class SVM():
         return cm
 
 
-def k_fold(X_train, y_train, C=10, gamma=2, folds=4):
+def k_fold(X_train, y_train, kernel, C=10, gamma=2, folds=4):
     """
     K-fold cross-validation algorithm to perform gridsearch
     on the hyperparameters gamma and C
@@ -144,6 +145,8 @@ def k_fold(X_train, y_train, C=10, gamma=2, folds=4):
     shuffle_indices = np.random.choice(list(range(N)), N, replace=False)
     shuffled_train = X_train[shuffle_indices]
     shuffled_labels = y_train[shuffle_indices]
+
+    # taking validation folds of 1600/4 = 400 observations (remaining 1200 are used for training)
     n_val = int(len(X_train)/folds)
 
     train_accuracies = []
@@ -154,55 +157,31 @@ def k_fold(X_train, y_train, C=10, gamma=2, folds=4):
         train = np.delete(shuffled_train, indices_valid, axis=0)
         valid_labs = shuffled_labels[indices_valid]
         train_labs = np.delete(shuffled_labels, indices_valid, axis=0)
-        clf = SVM(kernel=polynomial_kernel, gamma=gamma, C=C)
-        try:
-            clf.fit(train, train_labs)
-            val_accuracies.append(clf.accuracy(valid, valid_labs))
-            train_accuracies.append(clf.accuracy(train, train_labs))
-        except:
-            print(f'Wrong Parameters C = {C}, gamma = {gamma}')
-            val_accuracies.append(0)
-            train_accuracies.append(0)
-            break
+        clf = SVM(kernel=kernel, gamma=gamma, C=C)
+        clf.fit(train, train_labs)
+        val_accuracies.append(clf.accuracy(valid, valid_labs))
+        train_accuracies.append(clf.accuracy(train, train_labs))
+
     train_accuracy = np.mean(train_accuracies)
     val_accuracy = np.mean(val_accuracies)
     return train_accuracy, val_accuracy
 
-def plot3D(Cs, gammas, train_accs, test_accs):
 
-    x_1, x_2 = np.meshgrid(Cs, gammas)
-    z_1 = train_accs
-    z_2 = test_accs
-    fig = plt.figure(figsize=(8, 6))
+def get_performance(X_train, y_train, C, gamma, kernel, folds=4):
+    '''
+    Used for parallelization of GridSearch
+    '''
+    train_acc, val_acc = k_fold(X_train, y_train, kernel=kernel, C=C, gamma=gamma, folds=folds)
+    return {"C": C, "gamma": gamma, "train_accuracy": train_acc, "validation_accuracy": val_acc}
 
-    ax = plt.axes(projection='3d')
-    ax.plot_surface(x_1, x_2, z_1.reshape(x_1.shape), rstride=1, cstride=1,
-                    cmap='Blues', edgecolor='none')
-    ax.plot_surface(x_1, x_2, z_2.reshape(x_1.shape), rstride=1, cstride=1,
-                    cmap='Reds', edgecolor='none')
-    ax.set_title('surface')
-    plt.savefig('out_1', dpi=100)
-
-def GridSearch(X_train, y_train, L_C=0.1, U_C=1, L_gamma=1, U_gamma=2):
+def GridSearch(X_train, y_train, C_list, gamma_list, kernel = polynomial_kernel, n_jobs=-1, verbose=10):
     start = time.time()
+    data = Parallel(n_jobs=n_jobs, verbose=verbose)\
+                (delayed(get_performance)(X_train, y_train, C=c, gamma=g, folds=4, kernel=kernel) for c in C_list for g in gamma_list)
+    df = pd.json_normalize(data)
+    best = df.iloc[df.validation_accuracy.argmax()]
 
-    gammas = range(L_gamma, U_gamma+1)
-    Cs = np.arange(L_C, U_C+1, 0.2)
-    train_accs = np.zeros((len(Cs), len(gammas)))
-    val_accs = np.zeros_like(train_accs)
-    best_acc = 0
-    best_params = {'C':None, 'gamma':None}
-    for i, ci in enumerate(Cs):
-        for j, g in enumerate(gammas):
-            train_acc, val_acc = k_fold(X_train, y_train, C=ci, gamma=g, folds=4)
-            if val_acc > best_acc:
-                best_acc = val_acc
-                best_params['C'] = ci
-                best_params['gamma'] = g
-            train_accs[i][j] = train_acc
-            val_accs[i][j] = val_acc
-
-    plot3D(Cs, gammas, train_accs, val_accs)
     print(f'elapsed time: {round(time.time() - start,2)}')
-    return best_params, train_accs, val_accs
+    best_params = best[["C", "gamma"]].to_dict()
+    return best_params
 

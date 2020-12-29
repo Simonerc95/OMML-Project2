@@ -74,13 +74,13 @@ class SVMMulticlass():
         G = matrix(np.vstack((-1 * np.identity(n_samples), np.identity(n_samples))))
         h = matrix(np.vstack((np.zeros((n_samples, 1)), self.C * np.ones((n_samples, 1)))))
 
-
         # solve QP problem
         solvers.options['show_progress'] = False
         solution = solvers.qp(P, q, G, h, A, b)
 
         a = np.array(solution['x']).flatten()
         self.iter += solution['iterations']
+
         # Support vectors have non zero lagrange multipliers
         sv = a > tol
         ind = np.arange(len(a))[sv]
@@ -88,8 +88,8 @@ class SVMMulticlass():
         self.a[label] = a[sv]
         self.sv[label] = X[sv]
         self.sv_y[label] = y[sv]
-        # print("%d support vectors out of %d points" % (len(self.a), n_samples))
         self.opt_sol[label] = solution
+
         # Intercept
         self.b[label] = 0
         for n in range(len(self.a[label])):
@@ -111,7 +111,12 @@ class SVMMulticlass():
         R = np.array(L_pos.tolist() + U_neg.tolist() + SV.tolist())
         m_alpha = max((-grad_q * y)[R,])
         M_alpha = min((-grad_q * y)[S,])
-        self.diff[label] =  m_alpha - M_alpha
+        self.diff[label] = m_alpha - M_alpha
+
+        # Evaluation of objective function
+        # e = np.ones_like(a)
+        # print(f'dual objective  with formula',
+        #       0.5 * (a.T.dot(P).dot(a)) - e.T.dot(a))
 
         
     def predict_df(self, X, lab, a=None, sv=None, sv_y=None, b=None):
@@ -121,7 +126,7 @@ class SVMMulticlass():
         else:
             return (self.a[lab][None, :] * self.sv_y[lab][None, :]).dot(k(X, self.sv[lab], self.gamma).T) + self.b[lab]
 
-        
+
     def fit_multi(self, X_t, y_t):
         t = time.time()
         self.labels = np.unique(y_t)
@@ -140,7 +145,6 @@ class SVMMulticlass():
     
     def conf_mat(self, X, y):
         y_pred = self.predict_multi(X)
-        y_pred = y_pred.flatten()
         cm = confusion_matrix(y, y_pred)
         return cm
             
